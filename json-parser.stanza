@@ -59,12 +59,16 @@ defn parse (tokens:Seq<JsonToken>) -> HashTable<String,?>|Vector<?>|Int|Double|S
     if not empty? $ tokens:
         var token = peek $ tokens
         match(token):
-            (t:BoolToken|NumberToken|StringToken):
+            (t:NumberToken|StringToken):
                 next $ tokens
                 data $ t
-            (t:NullToken):
+            (t:IdentifierToken):
                 next $ tokens
-                None()
+                switch { data(t) == _ }:
+                    "null": None()
+                    "false": false
+                    "true": true
+                    else: throw $ ParseException(token, "null, false, or true")
             (t:LeftBraceToken):
                 parseObject()
             (t:LeftBracketToken):
@@ -95,11 +99,11 @@ defn scan (stream:StringInputStream) -> Seq<JsonToken>:
             else if char == '"':
                 yield $ scan-string-literal $ stream
             else if char == 'f':
-                yield $ scan-string("false", { BoolToken(false, _) }, stream)
+                yield $ scan-identifier $ stream
             else if char == 't':
-                yield $ scan-string("true", { BoolToken(true, _) }, stream)
+                yield $ scan-identifier $ stream
             else if char == 'n':
-                yield $ scan-string("null", { NullToken(_) }, stream)
+                yield $ scan-identifier $ stream
             else if is-number-start $ char:
                 yield $ scan-number $ stream
             else:
@@ -164,16 +168,14 @@ defn scan-string-literal (stream:StringInputStream) -> JsonToken:
             maybe-char = get-char $ stream
         throw $ EndOfInputException()
 
-defn scan-string (string:String, token:FileInfo -> JsonToken, stream:StringInputStream) -> JsonToken:
+defn scan-identifier (stream:StringInputStream) -> IdentifierToken:
+    val identifier = Vector<Char>()
+    var maybe-char = get-char $ stream
     val posn-info = info $ stream
-    for i in 0 to length(string) do:
-        match(get-char $ stream):
-            (char:Char):
-                if char != string[i]:
-                    throw $ ScanException(char, info $ stream)
-            (_):
-                throw $ EndOfInputException()
-    token $ posn-info
+    while maybe-char is Char and is-identifier-char(maybe-char as Char):
+        add(identifier, maybe-char as Char)
+        maybe-char = get-char $ stream
+    IdentifierToken(string-join $ identifier, posn-info)
 
 defn scan-number (stream:StringInputStream) -> JsonToken:
     val posn-info = info $ stream
@@ -282,7 +284,7 @@ defn is-digit (c:Char) -> False|True:
     c == '0' or is-digit-1-to-9(c)
 
 defn is-digit-1-to-9 (c:Char) -> False|True:
-    switch {c == _}:
+    switch { c == _ }:
         '1': true
         '2': true
         '3': true
@@ -295,7 +297,7 @@ defn is-digit-1-to-9 (c:Char) -> False|True:
         else: false
 
 defn is-hex-digit (c:Char) -> False|True:
-    switch {c == _}:
+    switch { c == _ }:
         'A': true
         'a': true
         'B': true
@@ -315,3 +317,13 @@ defn is-number-start (c:Char) -> False|True:
 
 defn is-whitespace (c:Char) -> False|True:
     c == ' ' or c == '\b' or c == '\n' or c == '\r' or c == '\t'
+
+defn is-identifier-char (c:Char) -> False|True:
+    switch { c == _ }:
+        ':': false
+        ',': false
+        '{': false
+        '}': false
+        '[': false
+        ']': false
+        else: not is-whitespace(c)

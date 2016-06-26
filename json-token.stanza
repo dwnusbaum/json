@@ -12,10 +12,6 @@ public:
     defmethod print (o:OutputStream, t:CommaToken):
         print(o, ", at %_" % [info $ t])
 
-    defstruct NullToken <: JsonToken: (info:FileInfo)
-    defmethod print (o:OutputStream, t:NullToken):
-        print(o, "null at %_" % [info $ t])
-
     defstruct LeftBraceToken <: JsonToken: (info:FileInfo)
     defmethod print (o:OutputStream, t:LeftBraceToken):
         print(o, "{ at %_" % [info $ t])
@@ -32,8 +28,8 @@ public:
     defmethod print (o:OutputStream, t:RightBracketToken):
         print(o, "] at %_" % [info $ t])
 
-    defstruct BoolToken <: JsonToken: (data: True|False, info:FileInfo)
-    defmethod print (o:OutputStream, t:BoolToken):
+    defstruct IdentifierToken <: JsonToken: (data: String, info:FileInfo)
+    defmethod print (o:OutputStream, t:IdentifierToken):
         print(o, "%_ at %_" % [data $ t, info $ t])
 
     defstruct NumberToken <: JsonToken: (data: Double|Int, info:FileInfo)
