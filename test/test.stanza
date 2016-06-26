@@ -1,0 +1,21 @@
+defpackage test:
+    import core
+    import json
+
+defn main ():
+    val args = command-line-arguments()
+    if length(args) >= 2:
+        try:
+            val printed = to-json(from-json-file $ args[1], true)
+            if length(args) < 3 or args[2] != "-s":
+                println $ printed
+        catch (e:Exception):
+            if length(args) < 3 or args[2] != "-s":
+                println $ e
+            exit(1)
+        exit(0)
+    else:
+        println $ "Usage: ./test file.json"
+        exit(1)
+
+main()

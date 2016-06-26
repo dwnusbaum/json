@@ -1,0 +1,10 @@
+[
+    "string",
+    1,
+    null,
+    true,
+    false,
+    {
+        "name": "test"
+    }
+]

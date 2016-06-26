@@ -1,4 +1,4 @@
-# json
+## json
 JSON parser and converter for the [Stanza](http://lbstanza.org) programming language.
 
 ## Installation
@@ -43,3 +43,10 @@ defpackage test-package:
 **Known Limitations**
 * Currently, incremental file parsing is not supported. To add it, the FileInputStream type would need to be augmented to include a peek? function, like the StringInputStream type.
 * Stanza does not seem to support unicode yet, so all unicode characters will be truncated to single byte ASCII characters.
+
+###Tests
+
+To run the test suite:
+```sh
+./compile.sh && ./test.sh
+```
