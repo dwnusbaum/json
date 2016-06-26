@@ -3,39 +3,24 @@ defpackage json-token:
 
 public:
     deftype JsonToken
-
     defstruct ColonToken <: JsonToken: (info:FileInfo)
-    defmethod print (o:OutputStream, t:ColonToken):
-        print(o, ": at %_" % [info $ t])
-
     defstruct CommaToken <: JsonToken: (info:FileInfo)
-    defmethod print (o:OutputStream, t:CommaToken):
-        print(o, ", at %_" % [info $ t])
-
     defstruct LeftBraceToken <: JsonToken: (info:FileInfo)
-    defmethod print (o:OutputStream, t:LeftBraceToken):
-        print(o, "{ at %_" % [info $ t])
-
     defstruct RightBraceToken <: JsonToken: (info:FileInfo)
-    defmethod print (o:OutputStream, t:RightBraceToken):
-        print(o, "} at %_" % [info $ t])
-
     defstruct LeftBracketToken <: JsonToken: (info:FileInfo)
-    defmethod print (o:OutputStream, t:LeftBracketToken):
-        print(o, "[ at %_" % [info $ t])
-
     defstruct RightBracketToken <: JsonToken: (info:FileInfo)
-    defmethod print (o:OutputStream, t:RightBracketToken):
-        print(o, "] at %_" % [info $ t])
-
     defstruct IdentifierToken <: JsonToken: (data: String, info:FileInfo)
-    defmethod print (o:OutputStream, t:IdentifierToken):
-        print(o, "%_ at %_" % [data $ t, info $ t])
-
     defstruct NumberToken <: JsonToken: (data: Double|Int, info:FileInfo)
-    defmethod print (o:OutputStream, t:NumberToken):
-        print(o, "%_ at %_" % [data $ t, info $ t])
-
     defstruct StringToken <: JsonToken: (data: String, info:FileInfo)
-    defmethod print (o:OutputStream, t:StringToken):
-        print(o, "%_ at %_" % [data $ t, info $ t])
+
+    defmethod print (o:OutputStream, t:JsonToken):
+        print{o, _} $ match(t):
+            (t:ColonToken) : ": at %_" % [info $ t]
+            (t:CommaToken) : ", at %_" % [info $ t]
+            (t:LeftBraceToken) : "{ at %_" % [info $ t]
+            (t:RightBraceToken) : "} at %_" % [info $ t]
+            (t:LeftBracketToken) : "[ at %_" % [info $ t]
+            (t:RightBracketToken) : "] at %_" % [info $ t]
+            (t:IdentifierToken) : "%_ at %_" % [data $ t, info $ t]
+            (t:NumberToken) : "%_ at %_" % [data $ t, info $ t]
+            (t:StringToken) : "%_ at %_" % [data $ t, info $ t]

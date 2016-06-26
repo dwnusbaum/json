@@ -18,5 +18,5 @@ public defn to-json (stanza-value:?, pretty:False|True) -> String:
     json/to-json(stanza-value, pretty, 4)
 
 public defn to-json (stanza-value:?, pretty:False|True, desired-indent-size:Int) -> String:
-    val indent-size = if pretty: desired-indent-size else: 0
+    val indent-size = desired-indent-size when pretty else 0
     json-printer/to-json(stanza-value, pretty, indent-size)

@@ -24,23 +24,25 @@ defn parse (tokens:Seq<JsonToken>) -> HashTable<String,?>|Vector<?>|Int|Double|S
             val object = HashTable<String,?>()
             next $ tokens ; Guaranteed to be {
             while not empty? $ tokens:
-                var token = next $ tokens
-                if token is RightBraceToken:
-                    return $ object
-                else if token is StringToken:
-                    val key = data $ token as StringToken
-                    match(next? $ tokens):
-                        (token:ColonToken):
-                            object[key] = parse $ tokens
-                        (token):
-                            throw $ ParseException(token, ":")
-                else:
-                    throw $ ParseException(token, "object member or }")
-                token = peek? $ tokens
-                if token is CommaToken:
-                    next $ tokens
-                    if peek?(tokens) is RightBraceToken:
-                        throw $ ParseException(token, "object member")
+                match(next $ tokens):
+                    (token:RightBraceToken):
+                        return $ object
+                    (token:StringToken):
+                        val key = data $ token
+                        match(next? $ tokens):
+                            (token:ColonToken):
+                                object[key] = parse $ tokens
+                            (token):
+                                throw $ ParseException(token, ":")
+                    (token):
+                        throw $ ParseException(token, "object member or }")
+                match(peek? $ tokens):
+                    (token:CommaToken):
+                        next $ tokens
+                        if peek?(tokens) is RightBraceToken:
+                            throw $ ParseException(token, "object member")
+                    (_):
+                        false
             throw $ EndOfInputException()
 
     defn parseVector () -> Vector<?>:
@@ -48,17 +50,19 @@ defn parse (tokens:Seq<JsonToken>) -> HashTable<String,?>|Vector<?>|Int|Double|S
             val vector = Vector<?>()
             next $ tokens ; Guaranteed to be [
             while not empty? $ tokens:
-                var token = peek? $ tokens
-                if token is RightBracketToken:
-                    next $ tokens
-                    return $ vector
-                else:
-                    add(vector, parse $ tokens)
-                token = peek? $ tokens
-                if token is CommaToken:
-                    next $ tokens
-                    if peek?(tokens) is RightBracketToken:
-                        throw $ ParseException(token, "array member")
+                match(peek? $ tokens):
+                   (token:RightBracketToken) :
+                      next $ tokens
+                      return $ vector
+                   (token) :
+                      add(vector, parse $ tokens)
+                match(peek? $ tokens):
+                   (token:CommaToken):
+                      next $ tokens
+                      if peek?(tokens) is RightBracketToken :
+                         throw $ ParseException(token, "array member")
+                   (_):
+                      false
             throw $ EndOfInputException()
 
     if not empty? $ tokens:
@@ -69,7 +73,7 @@ defn parse (tokens:Seq<JsonToken>) -> HashTable<String,?>|Vector<?>|Int|Double|S
                 data $ t
             (t:IdentifierToken):
                 next $ tokens
-                switch { data(t) == _ }:
+                switch {data(t) == _}:
                     "null": None()
                     "false": false
                     "true": true
@@ -85,17 +89,17 @@ defn parse (tokens:Seq<JsonToken>) -> HashTable<String,?>|Vector<?>|Int|Double|S
 
 defn scan (stream:StringInputStream) -> Seq<JsonToken>:
     val simple-tokens = HashTable<Char,(FileInfo -> JsonToken)>()
-    simple-tokens[':'] = { ColonToken(_) }
-    simple-tokens[','] = { CommaToken(_) }
-    simple-tokens['{'] = { LeftBraceToken(_) }
-    simple-tokens['}'] = { RightBraceToken(_) }
-    simple-tokens['['] = { LeftBracketToken(_) }
-    simple-tokens[']'] = { RightBracketToken(_) }
+    simple-tokens[':'] = {ColonToken(_)}
+    simple-tokens[','] = {CommaToken(_)}
+    simple-tokens['{'] = {LeftBraceToken(_)}
+    simple-tokens['}'] = {RightBraceToken(_)}
+    simple-tokens['['] = {LeftBracketToken(_)}
+    simple-tokens[']'] = {RightBracketToken(_)}
     generate<JsonToken> :
         var maybe-char = peek? $ stream
         while maybe-char is Char:
             val char = maybe-char as Char
-            if is-whitespace $ char:
+            if whitespace? $ char:
                 get-char $ stream
             else if key?(simple-tokens, char):
                 get-char $ stream
@@ -109,7 +113,7 @@ defn scan (stream:StringInputStream) -> Seq<JsonToken>:
                 yield $ scan-identifier $ stream
             else if char == 'n':
                 yield $ scan-identifier $ stream
-            else if is-number-start $ char:
+            else if number-start? $ char:
                 yield $ scan-number $ stream
             else:
                 throw $ ScanException(char, info $ stream)
@@ -139,7 +143,7 @@ defn scan-string-literal (stream:StringInputStream) -> JsonToken:
                 for i in 0 to 4 do:
                     maybe-char = get-char(stream)
                     if maybe-char is Char:
-                        if is-hex-digit $ maybe-char as Char:
+                        if hex-digit? $ maybe-char as Char:
                             code-point[i + 2] = maybe-char as Char
                     else:
                         throw $ EndOfInputException()
@@ -177,7 +181,7 @@ defn scan-identifier (stream:StringInputStream) -> IdentifierToken:
     val identifier = Vector<Char>()
     var maybe-char = get-char $ stream
     val posn-info = info $ stream
-    while maybe-char is Char and is-identifier-char(maybe-char as Char):
+    while maybe-char is Char and identifier-char?(maybe-char as Char):
         add(identifier, maybe-char as Char)
         maybe-char = get-char $ stream
     IdentifierToken(string-join $ identifier, posn-info)
@@ -194,9 +198,9 @@ defn scan-number (stream:StringInputStream) -> JsonToken:
         var char = maybe-char as Char
         if char == '0':
             add(number, '0')
-        else if is-digit-1-to-9 $ char:
+        else if digit-1-to-9? $ char:
             add(number, char)
-            add-all(number, many(is-digit, stream))
+            add-all(number, many(digit?, stream))
         else:
             throw $ ScanException(char, info $ stream)
     else:
@@ -209,7 +213,7 @@ defn scan-number (stream:StringInputStream) -> JsonToken:
         hasDecimal = true
         add(number, '.')
         get-char $ stream ; Consume peeked character
-        add-all(number, many1(is-digit, stream))
+        add-all(number, many1(digit?, stream))
 
     ; Optionally parse e/E +/- and at least 1 digit
     var hasE = false
@@ -226,7 +230,7 @@ defn scan-number (stream:StringInputStream) -> JsonToken:
                 if char == '+' or char == '-':
                     add(number, char)
                     get-char $ stream ; Consume peeked character
-                add-all(number, many1(is-digit, stream))
+                add-all(number, many1(digit?, stream))
             else:
                 throw $ EndOfInputException()
 
@@ -285,11 +289,8 @@ defn many (condition:Char -> False|True, stream:StringInputStream) -> Seq<Char>:
             maybe-char = peek? $ stream
         break()
 
-defn is-digit (c:Char) -> False|True:
-    c == '0' or is-digit-1-to-9(c)
-
-defn is-digit-1-to-9 (c:Char) -> False|True:
-    switch { c == _ }:
+defn digit-1-to-9? (c:Char) -> False|True:
+    switch {c == _}:
         '1': true
         '2': true
         '3': true
@@ -301,8 +302,8 @@ defn is-digit-1-to-9 (c:Char) -> False|True:
         '9': true
         else: false
 
-defn is-hex-digit (c:Char) -> False|True:
-    switch { c == _ }:
+defn hex-digit? (c:Char) -> False|True:
+    switch {c == _}:
         'A': true
         'a': true
         'B': true
@@ -315,20 +316,20 @@ defn is-hex-digit (c:Char) -> False|True:
         'e': true
         'F': true
         'f': true
-        else: is-digit(c)
+        else: digit?(c)
 
-defn is-number-start (c:Char) -> False|True:
-    c == '-' or is-digit(c)
+defn number-start? (c:Char) -> False|True:
+    c == '-' or digit?(c)
 
-defn is-whitespace (c:Char) -> False|True:
+defn whitespace? (c:Char) -> False|True:
     c == ' ' or c == '\b' or c == '\n' or c == '\r' or c == '\t'
 
-defn is-identifier-char (c:Char) -> False|True:
-    switch { c == _ }:
+defn identifier-char? (c:Char) -> False|True:
+    switch {c == _}:
         ':': false
         ',': false
         '{': false
         '}': false
         '[': false
         ']': false
-        else: not is-whitespace(c)
+        else: not whitespace?(c)

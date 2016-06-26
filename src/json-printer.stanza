@@ -10,7 +10,7 @@ public defn to-json (stanza-value:?, pretty:False|True, indent-size:Int):
 ; Private functions
 
 defn to-json (stanza-value:?, pretty:False|True, indent-size:Int, indent-level:Int, no-indent:False|True):
-    var this-indent-size = if no-indent: 0 else: indent-size
+    var this-indent-size = 0 when no-indent else indent-size
     label<String> return:
         val buffer = StringBuffer()
         match(stanza-value):
