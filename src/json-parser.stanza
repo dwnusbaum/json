@@ -6,12 +6,17 @@ defpackage json-parser:
 ; Public definitions
 
 public defn from-json (json-string:String, filename:String) -> HashTable<String,?>|Vector<?>|Int|Double|String|False|True|None:
-    parse $ scan $ StringInputStream(json-string, filename)
+    parse-top-level $ scan $ StringInputStream(json-string, filename)
 
 public defn from-json (json-string:String) -> HashTable<String,?>|Vector<?>|Int|Double|String|False|True|None:
-    parse $ scan $ StringInputStream $ json-string
+    parse-top-level $ scan $ StringInputStream $ json-string
 
 ; Private definitions
+
+defn parse-top-level (tokens:Seq<JsonToken>) -> HashTable<String,?>|Vector<?>|Int|Double|String|False|True|None:
+    val stanza-value = parse(tokens)
+    if not empty? $ tokens:
+        throw $ ParseException(next $ tokens, "end of input")
 
 defn parse (tokens:Seq<JsonToken>) -> HashTable<String,?>|Vector<?>|Int|Double|String|False|True|None:
     defn parseObject () -> HashTable<String,?>:
@@ -224,11 +229,6 @@ defn scan-number (stream:StringInputStream) -> JsonToken:
                 add-all(number, many1(is-digit, stream))
             else:
                 throw $ EndOfInputException()
-
-    maybe-char = peek? $ stream
-    if is-digit(maybe-char as Char):
-        get-char $ stream
-        throw $ ScanException(maybe-char as Char, info $ stream)
 
     if hasDecimal or hasE:
         NumberToken((to-double $ string-join $ number) as Double, posn-info)
