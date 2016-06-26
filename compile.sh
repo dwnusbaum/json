@@ -1,5 +1,8 @@
+path="$1"
 if [ -z "$1" ]; then
-    stanza *.stanza -pkg packages/
-else
-    stanza *.stanza -pkg "$1"
+    path="packages"
 fi
+if [ ! -d "$path" ]; then
+  mkdir "$path"
+fi
+stanza *.stanza -pkg "$path"
