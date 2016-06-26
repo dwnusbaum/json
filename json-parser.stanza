@@ -1,0 +1,317 @@
+defpackage json-parser:
+    import core
+    import collections
+    import json-token
+
+; Public definitions
+
+public defn from-json (json-string:String, filename:String) -> HashTable<String,?>|Vector<?>|Int|Double|String|False|True|None:
+    parse $ scan $ StringInputStream(json-string, filename)
+
+public defn from-json (json-string:String) -> HashTable<String,?>|Vector<?>|Int|Double|String|False|True|None:
+    parse $ scan $ StringInputStream $ json-string
+
+; Private definitions
+
+defn parse (tokens:Seq<JsonToken>) -> HashTable<String,?>|Vector<?>|Int|Double|String|False|True|None:
+    defn parseObject () -> HashTable<String,?>:
+        label<?> return:
+            val object = HashTable<String,?>()
+            next $ tokens ; Guaranteed to be {
+            while not empty? $ tokens:
+                var token = next $ tokens
+                if token is RightBraceToken:
+                    return $ object
+                else if token is StringToken:
+                    val key = data $ token as StringToken
+                    match(next? $ tokens):
+                        (token:ColonToken):
+                            object[key] = parse $ tokens
+                        (token):
+                            throw $ ParseException(token, ":")
+                else:
+                    throw $ ParseException(token, "object member or }")
+                token = peek? $ tokens
+                if token is CommaToken:
+                    next $ tokens
+                    if peek?(tokens) is RightBraceToken:
+                        throw $ ParseException(token, "object member")
+            throw $ EndOfInputException()
+
+    defn parseVector () -> Vector<?>:
+        label<?> return:
+            val vector = Vector<?>()
+            next $ tokens ; Guaranteed to be [
+            while not empty? $ tokens:
+                var token = peek? $ tokens
+                if token is RightBracketToken:
+                    next $ tokens
+                    return $ vector
+                else:
+                    add(vector, parse $ tokens)
+                token = peek? $ tokens
+                if token is CommaToken:
+                    next $ tokens
+                    if peek?(tokens) is RightBracketToken:
+                        throw $ ParseException(token, "array member")
+            throw $ EndOfInputException()
+
+    if not empty? $ tokens:
+        var token = peek $ tokens
+        match(token):
+            (t:BoolToken|NumberToken|StringToken):
+                next $ tokens
+                data $ t
+            (t:NullToken):
+                next $ tokens
+                None()
+            (t:LeftBraceToken):
+                parseObject()
+            (t:LeftBracketToken):
+                parseVector()
+            (_):
+                throw $ ParseException(token, "null, false, true, a number, [, or {")
+    else:
+        None()
+
+defn scan (stream:StringInputStream) -> Seq<JsonToken>:
+    val simple-tokens = HashTable<Char,(FileInfo -> JsonToken)>()
+    simple-tokens[':'] = { ColonToken(_) }
+    simple-tokens[','] = { CommaToken(_) }
+    simple-tokens['{'] = { LeftBraceToken(_) }
+    simple-tokens['}'] = { RightBraceToken(_) }
+    simple-tokens['['] = { LeftBracketToken(_) }
+    simple-tokens[']'] = { RightBracketToken(_) }
+    generate<JsonToken> :
+        var maybe-char = peek? $ stream
+        while maybe-char is Char:
+            val char = maybe-char as Char
+            if is-whitespace $ char:
+                get-char $ stream
+            else if key?(simple-tokens, char):
+                get-char $ stream
+                val posn-info = info $ stream
+                yield $ simple-tokens[char] $ posn-info
+            else if char == '"':
+                yield $ scan-string-literal $ stream
+            else if char == 'f':
+                yield $ scan-string("false", { BoolToken(false, _) }, stream)
+            else if char == 't':
+                yield $ scan-string("true", { BoolToken(true, _) }, stream)
+            else if char == 'n':
+                yield $ scan-string("null", { NullToken(_) }, stream)
+            else if is-number-start $ char:
+                yield $ scan-number $ stream
+            else:
+                throw $ ScanException(char, info $ stream)
+            maybe-char = peek? $ stream
+        break()
+
+defn scan-string-literal (stream:StringInputStream) -> JsonToken:
+    defn scanEscapedCharacter () -> Char:
+        val simple-tokens = HashTable<Char,Char>()
+        simple-tokens['"'] = '"'
+        simple-tokens['\\'] = '\\'
+        simple-tokens['/'] = '/'
+        simple-tokens['b'] = '\b'
+        simple-tokens['f'] = to-char(12)
+        simple-tokens['n'] = '\n'
+        simple-tokens['r'] = '\r'
+        simple-tokens['t'] = '\t'
+        var maybe-char = get-char $ stream
+        if maybe-char is Char:
+            var char = maybe-char as Char
+            if key?(simple-tokens, char):
+                simple-tokens[char]
+            else if char == 'u':
+                val code-point = Array<Char>(6)
+                code-point[0] = '0'
+                code-point[1] = 'x'
+                for i in 0 to 4 do:
+                    maybe-char = get-char(stream)
+                    if maybe-char is Char:
+                        if is-hex-digit $ maybe-char as Char:
+                            code-point[i + 2] = maybe-char as Char
+                    else:
+                        throw $ EndOfInputException()
+                match(to-int $ string-join $ code-point):
+                    (code-point:Int):
+                        match(to-char $ code-point): ; Stanza doesn't support unicode, so the code point is truncated to a single byte
+                            (unicode-char:Char):
+                                unicode-char
+                            (_):
+                                throw $ ScanException(char, info $ stream)
+                    (_):
+                        throw $ ScanException(char, info $ stream)
+            else:
+                throw $ ScanException(char, info $ stream)
+        else:
+            throw $ EndOfInputException()
+
+    val posn-info = info $ stream
+    get-char $ stream ; Known to be a "
+    label<StringToken> return:
+        val string = Vector<Char>()
+        var maybe-char = get-char $ stream
+        while maybe-char is Char:
+            var char = maybe-char as Char
+            if char == '"':
+                return $ StringToken(string-join $ string, posn-info)
+            else if char == '\\':
+                add(string, scanEscapedCharacter())
+            else:
+                add(string, char)
+            maybe-char = get-char $ stream
+        throw $ EndOfInputException()
+
+defn scan-string (string:String, token:FileInfo -> JsonToken, stream:StringInputStream) -> JsonToken:
+    val posn-info = info $ stream
+    for i in 0 to length(string) do:
+        match(get-char $ stream):
+            (char:Char):
+                if char != string[i]:
+                    throw $ ScanException(char, info $ stream)
+            (_):
+                throw $ EndOfInputException()
+    token $ posn-info
+
+defn scan-number (stream:StringInputStream) -> JsonToken:
+    val posn-info = info $ stream
+    val number = Vector<Char>()
+    var maybe-char = get-char $ stream
+    if maybe-char as Char == '-':
+        add(number, '-')
+        maybe-char = get-char $ stream
+
+    if maybe-char is Char:
+        var char = maybe-char as Char
+        if char == '0':
+            add(number, '0')
+        else if is-digit-1-to-9 $ char:
+            add(number, char)
+            add-all(number, many(is-digit, stream))
+        else:
+            throw $ ScanException(char, info $ stream)
+    else:
+        throw $ EndOfInputException()
+
+    ; Optionally parse a decimal, and at least 1 digit
+    var hasDecimal = false
+    maybe-char = peek? $ stream
+    if maybe-char is Char and (maybe-char as Char) == '.':
+        hasDecimal = true
+        add(number, '.')
+        get-char $ stream ; Consume peeked character
+        add-all(number, many1(is-digit, stream))
+
+    ; Optionally parse e/E +/- and at least 1 digit
+    var hasE = false
+    maybe-char = peek? $ stream
+    if maybe-char is Char:
+        var char = maybe-char as Char
+        if char == 'e' or char == 'E':
+            hasE = true
+            add(number, char)
+            get-char $ stream ; Consume peeked character
+            maybe-char = peek? $ stream
+            if maybe-char is Char:
+                char = maybe-char as Char
+                if char == '+' or char == '-':
+                    add(number, char)
+                    get-char $ stream ; Consume peeked character
+                add-all(number, many1(is-digit, stream))
+            else:
+                throw $ EndOfInputException()
+
+    if hasDecimal or hasE:
+        NumberToken((to-double $ string-join $ number) as Double, posn-info)
+    else:
+        NumberToken((to-int $ string-join $ number) as Int, posn-info)
+
+; Error types
+
+defstruct ParseException <: Exception: (token: JsonToken, expected:String)
+defmethod print (o:OutputStream, e:ParseException) :
+   print(o, "Error: Expecting %_, but found %_" % [expected $ e, token $ e])
+
+defstruct ScanException <: Exception: (char: Char, info:FileInfo)
+defmethod print (o:OutputStream, e:ScanException) :
+   print(o, "Error: Invalid character: %_ at %_" % [char $ e, info $ e])
+
+defstruct EndOfInputException <: Exception
+defmethod print (o:OutputStream, e:EndOfInputException) :
+   print(o, "Unexpected end of input.")
+
+; Utility functions
+
+defn peek? (tokens:Seq<JsonToken>) -> JsonToken:
+    if empty? $ tokens:
+        throw $ EndOfInputException()
+    else:
+        peek $ tokens
+
+defn next? (tokens:Seq<JsonToken>) -> JsonToken:
+    if empty? $ tokens:
+        throw $ EndOfInputException()
+    else:
+        next $ tokens
+
+defn many1 (condition:Char -> False|True, stream:StringInputStream) -> Seq<Char>:
+    generate<Char>:
+        match(get-char $ stream):
+            (start:Char):
+                if condition $ start:
+                    yield $ start
+                    do(yield, many(condition, stream))
+                    break()
+                else:
+                    throw $ ScanException(start, info $ stream)
+            (_):
+                throw $ EndOfInputException()
+
+defn many (condition:Char -> False|True, stream:StringInputStream) -> Seq<Char>:
+    generate<Char>:
+        var maybe-char = peek?(stream)
+        while maybe-char is Char and condition $ maybe-char as Char:
+            yield $ maybe-char as Char
+            get-char $ stream ; Consume peeked character
+            maybe-char = peek? $ stream
+        break()
+
+defn is-digit (c:Char) -> False|True:
+    c == '0' or is-digit-1-to-9(c)
+
+defn is-digit-1-to-9 (c:Char) -> False|True:
+    switch {c == _}:
+        '1': true
+        '2': true
+        '3': true
+        '4': true
+        '5': true
+        '6': true
+        '7': true
+        '8': true
+        '9': true
+        else: false
+
+defn is-hex-digit (c:Char) -> False|True:
+    switch {c == _}:
+        'A': true
+        'a': true
+        'B': true
+        'b': true
+        'C': true
+        'c': true
+        'D': true
+        'd': true
+        'E': true
+        'e': true
+        'F': true
+        'f': true
+        else: is-digit(c)
+
+defn is-number-start (c:Char) -> False|True:
+    c == '-' or is-digit(c)
+
+defn is-whitespace (c:Char) -> False|True:
+    c == ' ' or c == '\b' or c == '\n' or c == '\r' or c == '\t'

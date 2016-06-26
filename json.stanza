@@ -1,0 +1,22 @@
+defpackage json:
+    import core
+    import collections
+    import json-parser
+    import json-printer
+
+public defn from-json (json-string:String) -> HashTable<String,?>|Vector<?>|Int|Double|String|False|True|None:
+    json-parser/from-json $ json-string
+
+; TODO: Add peek? function to FileInputStream so files can be parsed incrementally
+public defn from-json-file (filename:String) -> HashTable<String,?>|Vector<?>|Int|Double|String|False|True|None:
+    json-parser/from-json(slurp $ filename, filename)
+
+public defn to-json (stanza-value:?) -> String:
+    json/to-json(stanza-value, false, 0)
+
+public defn to-json (stanza-value:?, pretty:False|True) -> String:
+    json/to-json(stanza-value, pretty, 4)
+
+public defn to-json (stanza-value:?, pretty:False|True, desired-indent-size:Int) -> String:
+    val indent-size = if pretty: desired-indent-size else: 0
+    json-printer/to-json(stanza-value, pretty, indent-size)

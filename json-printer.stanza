@@ -1,0 +1,81 @@
+defpackage json-printer:
+    import core
+    import collections
+
+; Public functions
+
+public defn to-json (stanza-value:?, pretty:False|True, indent-size:Int):
+    to-json(stanza-value, pretty, indent-size, 0, false)
+
+; Private functions
+
+defn to-json (stanza-value:?, pretty:False|True, indent-size:Int, indent-level:Int, no-indent:False|True):
+    var this-indent-size = if no-indent: 0 else: indent-size
+    label<String> return:
+        val buffer = StringBuffer()
+        match(stanza-value):
+            (object:HashTable<String,?>):
+                if length(object) == 0:
+                    print-indent(buffer, "{}", this-indent-size, indent-level)
+                else:
+                    print-indent(buffer, "{", this-indent-size, indent-level)
+                    if pretty:
+                        print(buffer, "\n")
+                    val entries = to-seq $ object
+                    while not empty? $ entries:
+                        val kv = next $ entries
+                        print-indent(buffer, "\"", indent-size, indent-level + 1)
+                        print(buffer, key $ kv)
+                        print(buffer, "\"")
+                        print(buffer, ":")
+                        if pretty:
+                            print(buffer, " ")
+                        print(buffer, to-json(value $ kv, pretty, indent-size, indent-level + 1, true))
+                        if not empty? $ entries:
+                            print(buffer, ",")
+                        if pretty:
+                            print(buffer, "\n")
+                    print-indent(buffer, "}", indent-size, indent-level)
+            (array:Array|Vector):
+                if length(array) == 0:
+                    print-indent(buffer, "[]", this-indent-size, indent-level)
+                else:
+                    print-indent(buffer, "[", this-indent-size, indent-level)
+                    if pretty:
+                        print(buffer, "\n")
+                    for i in 0 to length(array) do:
+                        print(buffer, to-json(array[i], pretty, indent-size, indent-level + 1, false))
+                        if not i == length(array) - 1:
+                            print(buffer, ",")
+                        if pretty:
+                            print(buffer, "\n")
+                    print-indent(buffer, "]", indent-size, indent-level)
+            (null:None):
+                print-indent(buffer, "null", this-indent-size, indent-level)
+            (literal:Double|False|Int|True):
+                print-indent(buffer, to-string $ literal, this-indent-size, indent-level)
+            (string:String):
+                print-indent(buffer, "\"", this-indent-size, indent-level)
+                print(buffer, string)
+                print(buffer, "\"")
+            (_):
+                throw $ InvalidJsonValueException $ stanza-value
+        return $ to-string $ buffer
+
+; Error types
+
+defstruct InvalidJsonValueException <: Exception: (data:?)
+defmethod print (o:OutputStream, e:InvalidJsonValueException) :
+   print(o, "Invalid JSON value: %_" % [data $ e])
+
+; Utility functions
+
+defn print-indent (o:OutputStream, string:String, indent-size:Int, indent-level:Int):
+    print(o, indent(string, indent-size, indent-level))
+
+defn indent (string:String, indent-size:Int, indent-level:Int) -> String:
+    val buffer = StringBuffer(length(string) + indent-size * indent-level)
+    for i in 0 to indent-size * indent-level do:
+        print(buffer, ' ')
+    print(buffer, string)
+    to-string $ buffer
