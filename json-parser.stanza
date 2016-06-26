@@ -225,6 +225,11 @@ defn scan-number (stream:StringInputStream) -> JsonToken:
             else:
                 throw $ EndOfInputException()
 
+    maybe-char = peek? $ stream
+    if is-digit(maybe-char as Char):
+        get-char $ stream
+        throw $ ScanException(maybe-char as Char, info $ stream)
+
     if hasDecimal or hasE:
         NumberToken((to-double $ string-join $ number) as Double, posn-info)
     else:
